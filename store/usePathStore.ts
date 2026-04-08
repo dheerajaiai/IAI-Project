@@ -12,10 +12,12 @@ type PathState = {
   explored: number[][];
   isRunning: boolean;
   stats: Stats | null;
+  summary: string;
   setResult: (data: {
     path: number[][];
     explored: number[][];
     stats: Stats;
+    summary?: string;
   }) => void;
   setGrid: (grid: number[][]) => void;
   setRunning: (isRunning: boolean) => void;
@@ -28,9 +30,11 @@ export const usePathStore = create<PathState>((set) => ({
   explored: [],
   isRunning: false,
   stats: null,
-  setResult: ({ path, explored, stats }) =>
-    set({ path, explored, stats, isRunning: false }),
+  summary: "",
+  setResult: ({ path, explored, stats, summary }) =>
+    set({ path, explored, stats, summary: summary || "", isRunning: false }),
   setGrid: (grid) => set({ grid }),
   setRunning: (isRunning) => set({ isRunning }),
-  reset: () => set({ path: [], explored: [], stats: null, isRunning: false }),
+  reset: () =>
+    set({ path: [], explored: [], stats: null, summary: "", isRunning: false }),
 }));

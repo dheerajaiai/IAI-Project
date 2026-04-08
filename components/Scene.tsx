@@ -8,7 +8,40 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { usePathStore } from "../store/usePathStore";
 
-type Algorithm = "astar" | "greedy" | "bfs" | "dfs";
+type Algorithm =
+  | "bfs"
+  | "dfs"
+  | "dls"
+  | "iddfs"
+  | "ucs"
+  | "bidirectional"
+  | "greedy"
+  | "astar"
+  | "idastar"
+  | "beam"
+  | "hill_simple"
+  | "hill_steepest"
+  | "hill_stochastic"
+  | "simulated_annealing"
+  | "local_beam"
+  | "genetic"
+  | "means_end"
+  | "ao_star"
+  | "minimax"
+  | "alpha_beta"
+  | "forward_chaining"
+  | "backward_chaining"
+  | "resolution"
+  | "csp_backtracking"
+  | "forward_checking"
+  | "ac3"
+  | "id3"
+  | "naive_bayes"
+  | "knn"
+  | "bayesian_inference"
+  | "bayesian_network"
+  | "hmm"
+  | "strips";
 
 type Heuristic = "manhattan" | "euclidean" | "diagonal";
 
@@ -20,14 +53,8 @@ type Stats = {
 
 type TraceStep = {
   step: number;
-  node: [number, number];
-  g?: number;
-  h?: number;
-  f?: number;
-  open_size?: number;
-  closed_size?: number;
-  frontier_size?: number;
-  visited_size?: number;
+  node?: [number, number];
+  [key: string]: string | number | boolean | [number, number] | undefined;
 };
 
 type TerrainNode = {
@@ -37,11 +64,135 @@ type TerrainNode = {
   passable: boolean;
 };
 
+type NodeCoord = [number, number];
+
+type PickMode = "start" | "end" | null;
+
 const GRID_SIZE = 50;
 const WIDTH = 30;
 const HALF = WIDTH / 2;
 const NOISE_SCALE = 0.15;
 const HEIGHT_SCALE = 3.5;
+
+const TERRAIN_ALGORITHMS = new Set<Algorithm>([
+  "bfs",
+  "dfs",
+  "dls",
+  "iddfs",
+  "ucs",
+  "bidirectional",
+  "greedy",
+  "astar",
+  "idastar",
+  "beam",
+  "hill_simple",
+  "hill_steepest",
+  "hill_stochastic",
+  "simulated_annealing",
+  "local_beam",
+  "genetic",
+  "means_end",
+  "ao_star",
+]);
+
+const HEURISTIC_ALGORITHMS = new Set<Algorithm>([
+  "greedy",
+  "astar",
+  "idastar",
+  "beam",
+  "hill_simple",
+  "hill_steepest",
+  "hill_stochastic",
+  "simulated_annealing",
+  "local_beam",
+  "genetic",
+  "means_end",
+  "ao_star",
+]);
+
+const BEAM_ALGORITHMS = new Set<Algorithm>(["beam", "local_beam"]);
+const DEPTH_ALGORITHMS = new Set<Algorithm>(["dls", "iddfs"]);
+
+const ALGORITHM_GROUPS: Array<{ title: string; items: Array<{ value: Algorithm; label: string }> }> = [
+  {
+    title: "Uninformed Search",
+    items: [
+      { value: "bfs", label: "Breadth-First Search (BFS)" },
+      { value: "dfs", label: "Depth-First Search (DFS)" },
+      { value: "dls", label: "Depth-Limited Search (DLS)" },
+      { value: "iddfs", label: "Iterative Deepening DFS (IDDFS)" },
+      { value: "ucs", label: "Uniform Cost Search (UCS)" },
+      { value: "bidirectional", label: "Bidirectional Search" },
+    ],
+  },
+  {
+    title: "Informed Search",
+    items: [
+      { value: "greedy", label: "Greedy Best-First" },
+      { value: "astar", label: "A*" },
+      { value: "idastar", label: "IDA*" },
+      { value: "beam", label: "Beam Search" },
+    ],
+  },
+  {
+    title: "Local Search",
+    items: [
+      { value: "hill_simple", label: "Simple Hill Climbing" },
+      { value: "hill_steepest", label: "Steepest Ascent Hill Climbing" },
+      { value: "hill_stochastic", label: "Stochastic Hill Climbing" },
+      { value: "simulated_annealing", label: "Simulated Annealing" },
+      { value: "local_beam", label: "Local Beam Search" },
+      { value: "genetic", label: "Genetic Algorithm" },
+    ],
+  },
+  {
+    title: "Adversarial Search",
+    items: [
+      { value: "minimax", label: "Minimax" },
+      { value: "alpha_beta", label: "Alpha-Beta Pruning" },
+    ],
+  },
+  {
+    title: "Knowledge Representation",
+    items: [
+      { value: "forward_chaining", label: "Forward Chaining" },
+      { value: "backward_chaining", label: "Backward Chaining" },
+      { value: "resolution", label: "Resolution" },
+    ],
+  },
+  {
+    title: "Constraint Satisfaction",
+    items: [
+      { value: "csp_backtracking", label: "Backtracking (CSP)" },
+      { value: "forward_checking", label: "Forward Checking" },
+      { value: "ac3", label: "Arc Consistency (AC-3)" },
+    ],
+  },
+  {
+    title: "Machine Learning Basics",
+    items: [
+      { value: "id3", label: "Decision Tree (ID3)" },
+      { value: "naive_bayes", label: "Naive Bayes" },
+      { value: "knn", label: "K-Nearest Neighbors" },
+    ],
+  },
+  {
+    title: "Probabilistic Reasoning",
+    items: [
+      { value: "bayesian_inference", label: "Bayesian Inference" },
+      { value: "bayesian_network", label: "Bayesian Network" },
+      { value: "hmm", label: "Hidden Markov Model (HMM)" },
+    ],
+  },
+  {
+    title: "Other Concepts",
+    items: [
+      { value: "means_end", label: "Means-End Analysis" },
+      { value: "ao_star", label: "AO*" },
+      { value: "strips", label: "Planning (STRIPS basics)" },
+    ],
+  },
+];
 
 export let terrainGridFlat: TerrainNode[] = [];
 
@@ -49,12 +200,23 @@ function ControlPanel({
   algorithm,
   heuristic,
   speed,
+  depthLimit,
+  beamWidth,
+  startNode,
+  endNode,
+  pickMode,
   onAlgorithmChange,
   onHeuristicChange,
   onSpeedChange,
+  onDepthLimitChange,
+  onBeamWidthChange,
+  onStartNodeChange,
+  onEndNodeChange,
+  onPickMode,
   onRegenerate,
   onRun,
   stats,
+  summary,
   isLoading,
   error,
   traceLines,
@@ -62,20 +224,31 @@ function ControlPanel({
   algorithm: Algorithm;
   heuristic: Heuristic;
   speed: number;
+  depthLimit: number;
+  beamWidth: number;
+  startNode: NodeCoord;
+  endNode: NodeCoord;
+  pickMode: PickMode;
   onAlgorithmChange: (value: Algorithm) => void;
   onHeuristicChange: (value: Heuristic) => void;
   onSpeedChange: (value: number) => void;
+  onDepthLimitChange: (value: number) => void;
+  onBeamWidthChange: (value: number) => void;
+  onStartNodeChange: (next: NodeCoord) => void;
+  onEndNodeChange: (next: NodeCoord) => void;
+  onPickMode: (mode: PickMode) => void;
   onRegenerate: () => void;
   onRun: () => void;
   stats: Stats | null;
+  summary: string;
   isLoading: boolean;
   error: string | null;
   traceLines: string[];
 }) {
-  const showHeuristic = useMemo(
-    () => algorithm === "astar" || algorithm === "greedy",
-    [algorithm]
-  );
+  const isTerrain = TERRAIN_ALGORITHMS.has(algorithm);
+  const showHeuristic = HEURISTIC_ALGORITHMS.has(algorithm);
+  const showDepth = DEPTH_ALGORITHMS.has(algorithm);
+  const showBeam = BEAM_ALGORITHMS.has(algorithm);
 
   return (
     <motion.aside
@@ -84,47 +257,79 @@ function ControlPanel({
       transition={{ duration: 0.4, ease: "easeOut" }}
       className="panel"
     >
-      <div className="panel-title">PathMind Control</div>
+      <div className="panel-title">IAI Algorithm Lab</div>
 
       <div className="label">Algorithm</div>
-      <div className="pill-row">
-        {(["astar", "greedy", "bfs", "dfs"] as Algorithm[]).map((item) => (
-          <button
-            key={item}
-            onClick={() => onAlgorithmChange(item)}
-            className={
-              algorithm === item ? "pill pill-active" : "pill pill-inactive"
-            }
-          >
-            {item.toUpperCase() === "ASTAR" ? "A*" : item.toUpperCase()}
-          </button>
+      <select
+        value={algorithm}
+        onChange={(event) => onAlgorithmChange(event.target.value as Algorithm)}
+        className="select"
+      >
+        {ALGORITHM_GROUPS.map((group) => (
+          <optgroup key={group.title} label={group.title}>
+            {group.items.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </optgroup>
         ))}
+      </select>
+
+      <div className="mode-tag">
+        {isTerrain ? "Terrain scenario (uses Start/Target nodes)" : "Scenario mode (concept demo dataset)"}
       </div>
 
       {showHeuristic ? (
         <>
           <div className="label">Heuristic</div>
           <div className="pill-row">
-            {(["manhattan", "euclidean", "diagonal"] as Heuristic[]).map(
-              (item) => (
-                <button
-                  key={item}
-                  onClick={() => onHeuristicChange(item)}
-                  className={
-                    heuristic === item
-                      ? "pill pill-active"
-                      : "pill pill-inactive"
-                  }
-                >
-                  {item[0].toUpperCase() + item.slice(1)}
-                </button>
-              )
-            )}
+            {(["manhattan", "euclidean", "diagonal"] as Heuristic[]).map((item) => (
+              <button
+                key={item}
+                onClick={() => onHeuristicChange(item)}
+                className={heuristic === item ? "pill pill-active" : "pill pill-inactive"}
+              >
+                {item[0].toUpperCase() + item.slice(1)}
+              </button>
+            ))}
           </div>
         </>
       ) : null}
 
-      <div className="label">Speed</div>
+      {showDepth ? (
+        <>
+          <div className="label">Depth Limit</div>
+          <div className="speed-row">
+            <input
+              type="range"
+              min={2}
+              max={80}
+              value={depthLimit}
+              onChange={(event) => onDepthLimitChange(Number(event.target.value))}
+            />
+            <div className="speed-value">{depthLimit}</div>
+          </div>
+        </>
+      ) : null}
+
+      {showBeam ? (
+        <>
+          <div className="label">Beam Width</div>
+          <div className="speed-row">
+            <input
+              type="range"
+              min={2}
+              max={24}
+              value={beamWidth}
+              onChange={(event) => onBeamWidthChange(Number(event.target.value))}
+            />
+            <div className="speed-value">{beamWidth}</div>
+          </div>
+        </>
+      ) : null}
+
+      <div className="label">Animation Speed</div>
       <div className="speed-row">
         <input
           type="range"
@@ -136,12 +341,65 @@ function ControlPanel({
         <div className="speed-value">{speed}</div>
       </div>
 
+      {isTerrain ? (
+        <>
+          <div className="label">Start Node (row, col)</div>
+          <div className="coord-row">
+            <input
+              type="number"
+              min={0}
+              max={GRID_SIZE - 1}
+              value={startNode[0]}
+              onChange={(event) => onStartNodeChange([Number(event.target.value), startNode[1]])}
+            />
+            <input
+              type="number"
+              min={0}
+              max={GRID_SIZE - 1}
+              value={startNode[1]}
+              onChange={(event) => onStartNodeChange([startNode[0], Number(event.target.value)])}
+            />
+            <button
+              onClick={() => onPickMode(pickMode === "start" ? null : "start")}
+              className={pickMode === "start" ? "mini-button mini-active" : "mini-button"}
+            >
+              Pick
+            </button>
+          </div>
+
+          <div className="label">Target Node (row, col)</div>
+          <div className="coord-row">
+            <input
+              type="number"
+              min={0}
+              max={GRID_SIZE - 1}
+              value={endNode[0]}
+              onChange={(event) => onEndNodeChange([Number(event.target.value), endNode[1]])}
+            />
+            <input
+              type="number"
+              min={0}
+              max={GRID_SIZE - 1}
+              value={endNode[1]}
+              onChange={(event) => onEndNodeChange([endNode[0], Number(event.target.value)])}
+            />
+            <button
+              onClick={() => onPickMode(pickMode === "end" ? null : "end")}
+              className={pickMode === "end" ? "mini-button mini-active" : "mini-button"}
+            >
+              Pick
+            </button>
+          </div>
+          {pickMode ? <div className="hint">Click a terrain cell to set {pickMode} node.</div> : null}
+        </>
+      ) : null}
+
       <button onClick={onRegenerate} className="ghost-button">
         Regenerate Terrain
       </button>
 
       <button onClick={onRun} disabled={isLoading} className="cta-button">
-        {isLoading ? "Running..." : "Run Search"}
+        {isLoading ? "Running..." : "Run Algorithm"}
       </button>
 
       {stats ? (
@@ -151,7 +409,10 @@ function ControlPanel({
           <div>Solve Time: {stats.solve_time_ms}ms</div>
         </div>
       ) : null}
+
+      {summary ? <div className="summary">{summary}</div> : null}
       {error ? <div className="error">{error}</div> : null}
+
       {traceLines.length ? (
         <div className="trace">
           {traceLines.map((line) => (
@@ -162,12 +423,14 @@ function ControlPanel({
 
       <style jsx>{`
         .panel {
-          background: rgba(255, 255, 250, 0.88);
+          background: rgba(255, 255, 250, 0.9);
           backdrop-filter: blur(20px);
           border: 1px solid rgba(30, 41, 59, 0.18);
           border-radius: 16px;
-          padding: 24px;
-          width: 280px;
+          padding: 18px;
+          width: 340px;
+          max-height: calc(100vh - 40px);
+          overflow: auto;
           color: #111827;
           pointer-events: auto;
           box-shadow: 0 18px 44px rgba(30, 41, 59, 0.16);
@@ -179,9 +442,27 @@ function ControlPanel({
           color: #334155;
         }
         .label {
-          margin-top: 16px;
-          font-size: 14px;
+          margin-top: 12px;
+          font-size: 13px;
           color: #1f2937;
+        }
+        .select {
+          margin-top: 8px;
+          width: 100%;
+          border-radius: 8px;
+          border: 1px solid rgba(51, 65, 85, 0.35);
+          padding: 8px;
+          font-size: 13px;
+          color: #0f172a;
+          background: #ffffff;
+        }
+        .mode-tag {
+          margin-top: 8px;
+          border-radius: 8px;
+          font-size: 12px;
+          padding: 8px;
+          background: rgba(148, 163, 184, 0.18);
+          color: #334155;
         }
         .pill-row {
           margin-top: 8px;
@@ -195,7 +476,6 @@ function ControlPanel({
           font-size: 11px;
           letter-spacing: 0.08em;
           border: 1px solid transparent;
-          transition: color 0.2s ease, background 0.2s ease, border 0.2s ease;
         }
         .pill-active {
           background: #0f172a;
@@ -212,18 +492,47 @@ function ControlPanel({
           align-items: center;
           gap: 12px;
         }
+        .speed-value {
+          font-size: 14px;
+          color: #1f2937;
+          width: 30px;
+          text-align: right;
+        }
         input[type="range"] {
           width: 100%;
           accent-color: #0f172a;
         }
-        .speed-value {
-          font-size: 14px;
-          color: #1f2937;
-          width: 24px;
-          text-align: right;
+        .coord-row {
+          margin-top: 8px;
+          display: grid;
+          grid-template-columns: 1fr 1fr auto;
+          gap: 8px;
+        }
+        .coord-row input {
+          border-radius: 8px;
+          border: 1px solid rgba(51, 65, 85, 0.3);
+          padding: 8px;
+          font-size: 12px;
+        }
+        .mini-button {
+          border-radius: 8px;
+          border: 1px solid rgba(51, 65, 85, 0.4);
+          background: #ffffff;
+          color: #334155;
+          font-size: 12px;
+          padding: 6px 10px;
+        }
+        .mini-active {
+          background: #0f172a;
+          color: #ffffff;
+        }
+        .hint {
+          margin-top: 6px;
+          font-size: 11px;
+          color: #0f766e;
         }
         .ghost-button {
-          margin-top: 16px;
+          margin-top: 14px;
           width: 100%;
           border-radius: 8px;
           border: 1px solid rgba(51, 65, 85, 0.5);
@@ -231,33 +540,34 @@ function ControlPanel({
           font-size: 13px;
           color: #1f2937;
           background: rgba(255, 255, 255, 0.75);
-          transition: border 0.2s ease;
-        }
-        .ghost-button:hover {
-          border-color: #0f172a;
         }
         .cta-button {
-          margin-top: 12px;
+          margin-top: 10px;
           width: 100%;
           border-radius: 8px;
           border: none;
           background: #0f172a;
           color: #ffffff;
           padding: 10px 12px;
-          font-size: 16px;
+          font-size: 14px;
           letter-spacing: 0.05em;
           text-transform: uppercase;
         }
-        .cta-button:disabled {
-          opacity: 0.6;
-        }
         .stats {
-          margin-top: 16px;
+          margin-top: 12px;
           font-family: "Courier New", monospace;
-          font-size: 13px;
+          font-size: 12px;
           color: #1f2937;
           display: grid;
-          gap: 4px;
+          gap: 3px;
+        }
+        .summary {
+          margin-top: 10px;
+          font-size: 12px;
+          color: #0f172a;
+          border-radius: 8px;
+          padding: 8px;
+          background: rgba(15, 23, 42, 0.06);
         }
         .error {
           margin-top: 10px;
@@ -265,7 +575,7 @@ function ControlPanel({
           color: #b3261e;
         }
         .trace {
-          margin-top: 12px;
+          margin-top: 10px;
           max-height: 170px;
           overflow: auto;
           padding: 10px;
@@ -273,10 +583,10 @@ function ControlPanel({
           background: rgba(255, 255, 255, 0.92);
           border: 1px solid rgba(51, 65, 85, 0.28);
           font-family: "Courier New", monospace;
-          font-size: 12px;
+          font-size: 11px;
           color: #111827;
           display: grid;
-          gap: 4px;
+          gap: 3px;
         }
       `}</style>
     </motion.aside>
@@ -352,7 +662,6 @@ function generateTerrain(seed: number) {
 
 function buildGeometry(positions: Float32Array, colors: Float32Array) {
   const geometry = new THREE.BufferGeometry();
-
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 
@@ -366,6 +675,7 @@ function buildGeometry(positions: Float32Array, colors: Float32Array) {
       indices.push(a, b, c, b, d, c);
     }
   }
+
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
@@ -386,19 +696,32 @@ function rgbTraceColor(t: number) {
   return middle.clone().lerp(end, (t - 0.5) / 0.5);
 }
 
+function toPoint(row: number, col: number, terrain: ReturnType<typeof generateTerrain>, lift = 0.18) {
+  const x = (col / (GRID_SIZE - 1) - 0.5) * WIDTH;
+  const z = (row / (GRID_SIZE - 1) - 0.5) * WIDTH;
+  const y = terrain.elevations[row][col] + lift;
+  return new THREE.Vector3(x, y, z);
+}
+
 function TerrainScene({
   terrain,
   speed,
   solverTrace,
+  startNode,
+  endNode,
+  pickMode,
+  onPickNode,
   onTraceStep,
 }: {
   terrain: ReturnType<typeof generateTerrain>;
   speed: number;
   solverTrace: TraceStep[];
+  startNode: NodeCoord;
+  endNode: NodeCoord;
+  pickMode: PickMode;
+  onPickNode: (row: number, col: number) => void;
   onTraceStep: (line: string) => void;
 }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const wireRef = useRef<THREE.LineSegments>(null);
   const instancedRef = useRef<THREE.InstancedMesh>(null);
   const pathMeshRef = useRef<THREE.Mesh>(null);
   const intervalRef = useRef<number | null>(null);
@@ -413,18 +736,16 @@ function TerrainScene({
       .fill(0)
       .map((_, index) => (index % 17) * 0.2),
   });
+
   const tracePointsRef = useRef<THREE.Vector3[]>([]);
   const [tracePoints, setTracePoints] = useState<THREE.Vector3[]>([]);
   const [traceColors, setTraceColors] = useState<THREE.Color[]>([]);
 
-  const geometry = useMemo(
-    () => buildGeometry(terrain.positions, terrain.colors),
-    [terrain]
-  );
+  const geometry = useMemo(() => buildGeometry(terrain.positions, terrain.colors), [terrain]);
+  const wireGeometry = useMemo(() => new THREE.WireframeGeometry(geometry), [geometry]);
 
-  const wireGeometry = useMemo(() => new THREE.WireframeGeometry(geometry), [
-    geometry,
-  ]);
+  const startMarker = useMemo(() => toPoint(startNode[0], startNode[1], terrain, 0.45), [startNode, terrain]);
+  const endMarker = useMemo(() => toPoint(endNode[0], endNode[1], terrain, 0.45), [endNode, terrain]);
 
   useEffect(() => {
     setGrid(terrain.gridForSolver);
@@ -453,33 +774,19 @@ function TerrainScene({
 
     instanceStates.current.locked.fill(null);
     instanceStates.current.animating.clear();
-
-    if (pathMeshRef.current && pathMeshRef.current.geometry) {
-      pathMeshRef.current.geometry.dispose();
-    }
     tracePointsRef.current = [];
     setTracePoints([]);
     setTraceColors([]);
+
+    if (pathMeshRef.current?.geometry) {
+      pathMeshRef.current.geometry.dispose();
+    }
   }, [terrain, setGrid]);
 
   useEffect(() => {
-    if (explored.length !== 0 || path.length !== 0) return;
-    tracePointsRef.current = [];
-    setTracePoints([]);
-    setTraceColors([]);
-    if (pathMeshRef.current && pathMeshRef.current.geometry) {
-      pathMeshRef.current.geometry.dispose();
-    }
-  }, [explored.length, path.length]);
-
-  useEffect(() => {
     return () => {
-      if (intervalRef.current) {
-        window.clearInterval(intervalRef.current);
-      }
-      if (animationRef.current) {
-        window.cancelAnimationFrame(animationRef.current);
-      }
+      if (intervalRef.current) window.clearInterval(intervalRef.current);
+      if (animationRef.current) window.cancelAnimationFrame(animationRef.current);
     };
   }, []);
 
@@ -489,18 +796,8 @@ function TerrainScene({
 
     const time = clock.getElapsedTime();
     for (let i = 0; i < GRID_SIZE * GRID_SIZE; i += 1) {
-      if (instanceStates.current.locked[i]) {
-        continue;
-      }
-      if (instanceStates.current.animating.has(i)) {
-        continue;
-      }
-      const pulse =
-        0.55 +
-        0.45 *
-          Math.sin(
-            (time * Math.PI * 2) / 2 + instanceStates.current.pulseOffsets[i]
-          );
+      if (instanceStates.current.locked[i] || instanceStates.current.animating.has(i)) continue;
+      const pulse = 0.55 + 0.45 * Math.sin((time * Math.PI * 2) / 2 + instanceStates.current.pulseOffsets[i]);
       const color = defaultEmissive.clone().multiplyScalar(pulse);
       instanced.setColorAt(i, color);
     }
@@ -513,9 +810,7 @@ function TerrainScene({
     const instanced = instancedRef.current;
     if (!instanced) return;
     instanced.setColorAt(index, color);
-    if (instanced.instanceColor) {
-      instanced.instanceColor.needsUpdate = true;
-    }
+    if (instanced.instanceColor) instanced.instanceColor.needsUpdate = true;
   };
 
   const animateColor = (index: number) => {
@@ -532,18 +827,9 @@ function TerrainScene({
     const tick = (now: number) => {
       const elapsed = now - start;
       const t = Math.min(elapsed / duration, 1);
-      let color: THREE.Color;
-      if (t < 0.5) {
-        const tt = t / 0.5;
-        color = cold.clone().lerp(mid, tt);
-      } else {
-        const tt = (t - 0.5) / 0.5;
-        color = mid.clone().lerp(hot, tt);
-      }
+      const color = t < 0.5 ? cold.clone().lerp(mid, t / 0.5) : mid.clone().lerp(hot, (t - 0.5) / 0.5);
       instanced.setColorAt(index, color);
-      if (instanced.instanceColor) {
-        instanced.instanceColor.needsUpdate = true;
-      }
+      if (instanced.instanceColor) instanced.instanceColor.needsUpdate = true;
       if (t < 1) {
         animationRef.current = requestAnimationFrame(tick);
       } else {
@@ -557,97 +843,67 @@ function TerrainScene({
 
   const buildPathTube = (points: THREE.Vector3[]) => {
     if (!pathMeshRef.current) return;
-    if (pathMeshRef.current.geometry) {
-      pathMeshRef.current.geometry.dispose();
-    }
+    if (pathMeshRef.current.geometry) pathMeshRef.current.geometry.dispose();
     const curve = new THREE.CatmullRomCurve3(points);
-    const geometry = new THREE.TubeGeometry(curve, 120, 0.06, 8, false);
-    const colorArray = new Float32Array(
-      geometry.attributes.position.count * 3
-    );
-    for (let i = 0; i < geometry.attributes.position.count; i += 1) {
-      const t = i / Math.max(geometry.attributes.position.count - 1, 1);
+    const geo = new THREE.TubeGeometry(curve, 120, 0.06, 8, false);
+
+    const colorArray = new Float32Array(geo.attributes.position.count * 3);
+    for (let i = 0; i < geo.attributes.position.count; i += 1) {
+      const t = i / Math.max(geo.attributes.position.count - 1, 1);
       const color = rgbTraceColor(t);
       colorArray[i * 3 + 0] = color.r;
       colorArray[i * 3 + 1] = color.g;
       colorArray[i * 3 + 2] = color.b;
     }
-    geometry.setAttribute("color", new THREE.BufferAttribute(colorArray, 3));
-    geometry.setDrawRange(0, 0);
-    pathMeshRef.current.geometry = geometry;
 
-    const totalCount = geometry.index
-      ? geometry.index.count
-      : geometry.attributes.position.count;
+    geo.setAttribute("color", new THREE.BufferAttribute(colorArray, 3));
+    geo.setDrawRange(0, 0);
+    pathMeshRef.current.geometry = geo;
 
+    const totalCount = geo.index ? geo.index.count : geo.attributes.position.count;
     const start = performance.now();
     const duration = 800;
     const animate = (now: number) => {
       const t = Math.min((now - start) / duration, 1);
-      geometry.setDrawRange(0, Math.floor(totalCount * t));
-      if (t < 1) {
-        requestAnimationFrame(animate);
-      }
+      geo.setDrawRange(0, Math.floor(totalCount * t));
+      if (t < 1) requestAnimationFrame(animate);
     };
     requestAnimationFrame(animate);
   };
 
-  const updateTraceLine = (
-    row: number,
-    col: number,
-    stepIndex: number,
-    total: number
-  ) => {
-    const x = (col / (GRID_SIZE - 1) - 0.5) * WIDTH;
-    const z = (row / (GRID_SIZE - 1) - 0.5) * WIDTH;
-    const y = terrain.elevations[row][col] + 0.25;
-    tracePointsRef.current.push(new THREE.Vector3(x, y, z));
+  const updateTraceLine = (row: number, col: number, stepIndex: number, total: number) => {
+    tracePointsRef.current.push(toPoint(row, col, terrain, 0.25));
 
     const pointSnapshot = [...tracePointsRef.current];
     setTracePoints(pointSnapshot);
     setTraceColors(
-      pointSnapshot.map((_, i) =>
-        rgbTraceColor(i / Math.max(pointSnapshot.length - 1, 1))
-      )
+      pointSnapshot.map((_, i) => rgbTraceColor(i / Math.max(pointSnapshot.length - 1, 1)))
     );
 
     const event = solverTrace[stepIndex];
     if (event) {
       const details = Object.entries(event)
         .filter(([key]) => key !== "node" && key !== "step")
-        .map(([key, value]) => `${key}=${value}`)
+        .map(([key, value]) => `${key}=${String(value)}`)
         .join(" ");
-      onTraceStep(
-        `#${event.step} node(${event.node[0]},${event.node[1]}) ${details}`
-      );
+      const nodeLabel = event.node ? `node(${event.node[0]},${event.node[1]})` : "scenario-step";
+      onTraceStep(`#${event.step} ${nodeLabel} ${details}`);
     } else {
-      onTraceStep(
-        `#${stepIndex} node(${row},${col}) explored=${stepIndex + 1}/${total}`
-      );
+      onTraceStep(`#${stepIndex} node(${row},${col}) explored=${stepIndex + 1}/${total}`);
     }
   };
 
   useEffect(() => {
-    if (!explored.length) return;
-    if (!instancedRef.current) return;
+    if (!explored.length || !instancedRef.current) return;
 
-    if (intervalRef.current) {
-      window.clearInterval(intervalRef.current);
-    }
+    if (intervalRef.current) window.clearInterval(intervalRef.current);
 
     let index = 0;
     intervalRef.current = window.setInterval(() => {
       if (index >= explored.length) {
-        if (intervalRef.current) {
-          window.clearInterval(intervalRef.current);
-        }
+        if (intervalRef.current) window.clearInterval(intervalRef.current);
         if (path.length) {
-          const points = path.map(([row, col]) => {
-            const x = (col / (GRID_SIZE - 1) - 0.5) * WIDTH;
-            const z = (row / (GRID_SIZE - 1) - 0.5) * WIDTH;
-            const y = terrain.elevations[row][col] + 0.15;
-            return new THREE.Vector3(x, y, z);
-          });
+          const points = path.map(([row, col]) => toPoint(row, col, terrain, 0.15));
           buildPathTube(points);
         }
         return;
@@ -660,18 +916,26 @@ function TerrainScene({
     }, (11 - speed) * 20);
 
     return () => {
-      if (intervalRef.current) {
-        window.clearInterval(intervalRef.current);
-      }
+      if (intervalRef.current) window.clearInterval(intervalRef.current);
     };
-  }, [explored, path, speed, terrain.elevations, onTraceStep, solverTrace]);
+  }, [explored, path, speed, terrain, solverTrace, onTraceStep]);
 
-  const handleToggleObstacle = (event: ThreeEvent<PointerEvent>) => {
-    if (!event.point) return;
+  const handlePointerDown = (event: ThreeEvent<PointerEvent>) => {
     const point = event.point as THREE.Vector3;
+    if (!point) return;
+
     const col = Math.round(((point.x + HALF) / WIDTH) * (GRID_SIZE - 1));
     const row = Math.round(((point.z + HALF) / WIDTH) * (GRID_SIZE - 1));
     if (row < 0 || row >= GRID_SIZE || col < 0 || col >= GRID_SIZE) return;
+
+    if (pickMode) {
+      onPickNode(row, col);
+      return;
+    }
+
+    if ((row === startNode[0] && col === startNode[1]) || (row === endNode[0] && col === endNode[1])) {
+      return;
+    }
 
     const updatedGrid = grid.map((r) => r.slice());
     const baseElevation = terrain.gridForSolver[row][col];
@@ -700,41 +964,21 @@ function TerrainScene({
 
   return (
     <>
-      <mesh
-        ref={meshRef}
-        geometry={geometry}
-        onPointerDown={handleToggleObstacle}
-        receiveShadow
-      >
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.6}
-          metalness={0.1}
-        />
+      <mesh geometry={geometry} onPointerDown={handlePointerDown} receiveShadow>
+        <meshStandardMaterial vertexColors roughness={0.6} metalness={0.1} />
       </mesh>
-      <lineSegments ref={wireRef} geometry={wireGeometry}>
+
+      <lineSegments geometry={wireGeometry}>
         <lineBasicMaterial color="#4b5563" opacity={0.32} transparent />
       </lineSegments>
+
       {tracePoints.length > 1 ? (
-        <Line
-          points={tracePoints}
-          vertexColors={traceColors}
-          lineWidth={2}
-          transparent
-          opacity={0.95}
-        />
+        <Line points={tracePoints} vertexColors={traceColors} lineWidth={2} transparent opacity={0.95} />
       ) : null}
-      <instancedMesh
-        ref={instancedRef}
-        args={[undefined, undefined, GRID_SIZE * GRID_SIZE]}
-      >
+
+      <instancedMesh ref={instancedRef} args={[undefined, undefined, GRID_SIZE * GRID_SIZE]}>
         <sphereGeometry args={[0.08, 10, 10]} />
-        <meshStandardMaterial
-          color="#ffffff"
-          emissive="#4b5563"
-          emissiveIntensity={1.2}
-          vertexColors
-        />
+        <meshStandardMaterial color="#ffffff" emissive="#4b5563" emissiveIntensity={1.2} vertexColors />
       </instancedMesh>
 
       <mesh ref={pathMeshRef}>
@@ -748,37 +992,93 @@ function TerrainScene({
         />
       </mesh>
 
-      <OrbitControls
-        enableDamping
-        dampingFactor={0.08}
-        minPolarAngle={0.2}
-        maxPolarAngle={1.2}
-      />
+      <mesh position={startMarker}>
+        <sphereGeometry args={[0.24, 18, 18]} />
+        <meshStandardMaterial color="#1d4ed8" emissive="#1d4ed8" emissiveIntensity={0.65} />
+      </mesh>
+
+      <mesh position={endMarker}>
+        <sphereGeometry args={[0.24, 18, 18]} />
+        <meshStandardMaterial color="#b91c1c" emissive="#b91c1c" emissiveIntensity={0.65} />
+      </mesh>
+
+      <OrbitControls enableDamping dampingFactor={0.08} minPolarAngle={0.2} maxPolarAngle={1.2} />
     </>
   );
 }
 
 export default function Scene() {
-  const { grid, stats, isRunning, setResult, setRunning, reset } =
-    usePathStore();
+  const { grid, stats, summary, isRunning, setResult, setRunning, reset, setGrid } = usePathStore();
   const [seed, setSeed] = useState(42);
   const [terrain, setTerrain] = useState(() => generateTerrain(seed));
   const [algorithm, setAlgorithm] = useState<Algorithm>("astar");
   const [heuristic, setHeuristic] = useState<Heuristic>("euclidean");
   const [speed, setSpeed] = useState(5);
+  const [depthLimit, setDepthLimit] = useState(20);
+  const [beamWidth, setBeamWidth] = useState(6);
+  const [startNode, setStartNode] = useState<NodeCoord>([0, 0]);
+  const [endNode, setEndNode] = useState<NodeCoord>([GRID_SIZE - 1, GRID_SIZE - 1]);
+  const [pickMode, setPickMode] = useState<PickMode>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [solverTrace, setSolverTrace] = useState<TraceStep[]>([]);
   const [traceLines, setTraceLines] = useState<string[]>([]);
+
+  const fog = useMemo(() => new THREE.Fog("#f1efe8", 20, 80), []);
+
+  const ensureNodePassable = useCallback(
+    (node: NodeCoord) => {
+      const [row, col] = node;
+      if (!grid.length || !grid[row] || grid[row][col] !== 0) return;
+
+      const updatedGrid = grid.map((r) => r.slice());
+      const base = terrain.gridForSolver[row][col] || 0.2;
+      updatedGrid[row][col] = base;
+      setGrid(updatedGrid);
+
+      const idx = row * GRID_SIZE + col;
+      const flatNode = terrainGridFlat[idx];
+      if (flatNode) {
+        flatNode.passable = true;
+        flatNode.elevation = base;
+      }
+    },
+    [grid, setGrid, terrain]
+  );
+
+  useEffect(() => {
+    ensureNodePassable(startNode);
+    ensureNodePassable(endNode);
+  }, [startNode, endNode, ensureNodePassable]);
+
+  const clampNode = useCallback((node: NodeCoord): NodeCoord => {
+    const row = Math.max(0, Math.min(GRID_SIZE - 1, node[0]));
+    const col = Math.max(0, Math.min(GRID_SIZE - 1, node[1]));
+    return [row, col];
+  }, []);
+
+  const handlePickNode = useCallback(
+    (row: number, col: number) => {
+      const next: NodeCoord = [row, col];
+      if (pickMode === "start") {
+        setStartNode(next);
+      } else if (pickMode === "end") {
+        setEndNode(next);
+      }
+      setPickMode(null);
+    },
+    [pickMode]
+  );
+
   const handleTraceStep = useCallback((line: string) => {
     setTraceLines((previous) => [line, ...previous].slice(0, 14));
   }, []);
 
-  const fog = useMemo(() => {
-    return new THREE.Fog("#f1efe8", 20, 80);
-  }, []);
-
   const handleRun = async () => {
     if (!grid.length || isRunning) return;
+
+    const start = clampNode(startNode);
+    const end = clampNode(endNode);
+
     reset();
     setRunError(null);
     setSolverTrace([]);
@@ -786,32 +1086,49 @@ export default function Scene() {
     setRunning(true);
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/solve`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            grid,
-            start: [0, 0],
-            end: [GRID_SIZE - 1, GRID_SIZE - 1],
-            algorithm,
-            heuristic,
-          }),
-        }
-      );
+      const defaultApiBase =
+        typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")
+          ? `${window.location.origin}/_/backend`
+          : "http://127.0.0.1:8000";
+
+      const apiBase = (process.env.NEXT_PUBLIC_API_URL || defaultApiBase).replace(/\/$/, "");
+
+      const response = await fetch(`${apiBase}/solve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          grid,
+          start,
+          end,
+          algorithm,
+          heuristic,
+          depth_limit: depthLimit,
+          beam_width: beamWidth,
+        }),
+      });
 
       if (!response.ok) {
         throw new Error(`Solver request failed (${response.status})`);
       }
 
       const data = await response.json();
-      setSolverTrace(Array.isArray(data.trace) ? data.trace : []);
+      const trace: TraceStep[] = Array.isArray(data.trace) ? data.trace : [];
+      setSolverTrace(trace);
+
       setResult({
         path: data.path || [],
         explored: data.explored || [],
         stats: data.stats,
+        summary: data.summary || "",
       });
+
+      if (!Array.isArray(data.explored) || data.explored.length === 0) {
+        const quickLines = trace
+          .slice(0, 12)
+          .map((item) => JSON.stringify(item))
+          .reverse();
+        setTraceLines(quickLines);
+      }
     } catch (error) {
       setRunning(false);
       setRunError("Search request failed. Check backend is running on :8000.");
@@ -824,9 +1141,15 @@ export default function Scene() {
     setRunError(null);
     setSolverTrace([]);
     setTraceLines([]);
+    setPickMode(null);
+
     const nextSeed = seed + 1;
     setSeed(nextSeed);
-    setTerrain(generateTerrain(nextSeed));
+    const nextTerrain = generateTerrain(nextSeed);
+    setTerrain(nextTerrain);
+
+    setStartNode([0, 0]);
+    setEndNode([GRID_SIZE - 1, GRID_SIZE - 1]);
   };
 
   return (
@@ -842,32 +1165,41 @@ export default function Scene() {
         <primitive attach="fog" object={fog} />
         <ambientLight intensity={0.3} />
         <directionalLight position={[0, 20, 0]} intensity={1} />
+
         <TerrainScene
           terrain={terrain}
           speed={speed}
           solverTrace={solverTrace}
+          startNode={startNode}
+          endNode={endNode}
+          pickMode={pickMode}
+          onPickNode={handlePickNode}
           onTraceStep={handleTraceStep}
         />
       </Canvas>
 
-      <div
-        style={{
-          position: "absolute",
-          top: 24,
-          right: 24,
-          zIndex: 10,
-        }}
-      >
+      <div style={{ position: "absolute", top: 20, right: 20, zIndex: 10 }}>
         <ControlPanel
           algorithm={algorithm}
           heuristic={heuristic}
           speed={speed}
+          depthLimit={depthLimit}
+          beamWidth={beamWidth}
+          startNode={startNode}
+          endNode={endNode}
+          pickMode={pickMode}
           onAlgorithmChange={setAlgorithm}
           onHeuristicChange={setHeuristic}
           onSpeedChange={setSpeed}
+          onDepthLimitChange={setDepthLimit}
+          onBeamWidthChange={setBeamWidth}
+          onStartNodeChange={(next) => setStartNode(clampNode(next))}
+          onEndNodeChange={(next) => setEndNode(clampNode(next))}
+          onPickMode={setPickMode}
           onRegenerate={handleRegenerate}
           onRun={handleRun}
           stats={stats}
+          summary={summary}
           isLoading={isRunning}
           error={runError}
           traceLines={traceLines}
