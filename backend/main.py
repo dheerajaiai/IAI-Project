@@ -60,6 +60,81 @@ class SolveResponse(BaseModel):
     stats: dict
 
 
+ALGORITHM_INFO = {
+    "bfs": {
+        "label": "Breadth-First Search (BFS)",
+        "idea": "It explores layer by layer from the start node.",
+        "complexity": "O(V + E)",
+    },
+    "dfs": {
+        "label": "Depth-First Search (DFS)",
+        "idea": "It goes deep on one branch first, then backtracks.",
+        "complexity": "O(V + E)",
+    },
+    "dls": {
+        "label": "Depth-Limited Search (DLS)",
+        "idea": "DFS is stopped at a depth limit.",
+        "complexity": "O(b^L), where L is depth limit",
+    },
+    "iddfs": {
+        "label": "Iterative Deepening DFS (IDDFS)",
+        "idea": "It runs DLS repeatedly with increasing depth limits.",
+        "complexity": "O(b^d), where d is goal depth",
+    },
+    "ucs": {
+        "label": "Uniform Cost Search (UCS)",
+        "idea": "It always expands the path with the current lowest total cost.",
+        "complexity": "Exponential in worst case (often written O(b^(1+C*/epsilon)))",
+    },
+    "greedy": {
+        "label": "Greedy Best-First Search",
+        "idea": "It chooses the node that looks closest to the goal by heuristic.",
+        "complexity": "O(b^m) in worst case",
+    },
+    "astar": {
+        "label": "A* Search",
+        "idea": "It balances path cost so far (g) and estimated remaining cost (h).",
+        "complexity": "O(b^d) in worst case",
+    },
+    "hill_simple": {
+        "label": "Simple Hill Climbing",
+        "idea": "It moves to the first better neighbor it finds.",
+        "complexity": "O(k*b), k=steps, b=neighbors",
+    },
+    "hill_steepest": {
+        "label": "Steepest Ascent Hill Climbing",
+        "idea": "It checks neighbors and moves to the best improving one.",
+        "complexity": "O(k*b), k=steps, b=neighbors",
+    },
+    "hill_stochastic": {
+        "label": "Stochastic Hill Climbing",
+        "idea": "It picks one improving neighbor with a stochastic rule.",
+        "complexity": "O(k*b), k=steps, b=neighbors",
+    },
+}
+
+
+def build_run_summary(
+    algorithm: Algorithm,
+    solved: bool,
+    start: Tuple[int, int],
+    end: Tuple[int, int],
+    nodes_explored: int,
+    path_length: int,
+    solve_time_ms: int,
+) -> str:
+    info = ALGORITHM_INFO[algorithm]
+    outcome = "found a path" if solved else "did not find a path"
+    return (
+        f"{info['label']}: {info['idea']} "
+        f"For this run from {start} to {end}, it {outcome}. "
+        f"Nodes explored: {nodes_explored}. "
+        f"Path length: {path_length}. "
+        f"Time taken: {solve_time_ms} ms. "
+        f"Time complexity (worst-case): {info['complexity']}."
+    )
+
+
 def heuristic(a: Tuple[int, int], b: Tuple[int, int], mode: Heuristic) -> float:
     dx = abs(a[0] - b[0])
     dy = abs(a[1] - b[1])
@@ -711,9 +786,19 @@ def solve(payload: SolveRequest):
 
     solve_time_ms = int((time.perf_counter() - start_time) * 1000)
     solved = bool(path)
-    summary = (
-        f"{payload.algorithm.upper()} {'found a route' if solved else 'did not find a route'} "
-        f"from {start} to {end}."
+    stats = {
+        "nodes_explored": len(explored),
+        "path_length": len(path),
+        "solve_time_ms": solve_time_ms,
+    }
+    summary = build_run_summary(
+        payload.algorithm,
+        solved,
+        start,
+        end,
+        stats["nodes_explored"],
+        stats["path_length"],
+        stats["solve_time_ms"],
     )
 
     return {
@@ -721,11 +806,7 @@ def solve(payload: SolveRequest):
         "explored": explored,
         "trace": trace,
         "summary": summary,
-        "stats": {
-            "nodes_explored": len(explored),
-            "path_length": len(path),
-            "solve_time_ms": solve_time_ms,
-        },
+        "stats": stats,
     }
 
 
