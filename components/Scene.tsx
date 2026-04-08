@@ -14,11 +14,11 @@ type Algorithm =
   | "dls"
   | "iddfs"
   | "ucs"
-  | "bidirectional"
   | "greedy"
   | "astar"
-  | "idastar"
-  | "beam";
+  | "hill_simple"
+  | "hill_steepest"
+  | "hill_stochastic";
 
 type Heuristic = "manhattan" | "euclidean" | "diagonal";
 
@@ -54,11 +54,11 @@ const HEIGHT_SCALE = 3.5;
 const HEURISTIC_ALGORITHMS = new Set<Algorithm>([
   "greedy",
   "astar",
-  "idastar",
-  "beam",
+  "hill_simple",
+  "hill_steepest",
+  "hill_stochastic",
 ]);
 
-const BEAM_ALGORITHMS = new Set<Algorithm>(["beam"]);
 const DEPTH_ALGORITHMS = new Set<Algorithm>(["dls", "iddfs"]);
 
 const ALGORITHM_GROUPS: Array<{ title: string; items: Array<{ value: Algorithm; label: string }> }> = [
@@ -70,7 +70,6 @@ const ALGORITHM_GROUPS: Array<{ title: string; items: Array<{ value: Algorithm; 
       { value: "dls", label: "Depth-Limited Search (DLS)" },
       { value: "iddfs", label: "Iterative Deepening DFS (IDDFS)" },
       { value: "ucs", label: "Uniform Cost Search (UCS)" },
-      { value: "bidirectional", label: "Bidirectional Search" },
     ],
   },
   {
@@ -78,8 +77,14 @@ const ALGORITHM_GROUPS: Array<{ title: string; items: Array<{ value: Algorithm; 
     items: [
       { value: "greedy", label: "Greedy Best-First" },
       { value: "astar", label: "A*" },
-      { value: "idastar", label: "IDA*" },
-      { value: "beam", label: "Beam Search" },
+    ],
+  },
+  {
+    title: "Hill Climbing",
+    items: [
+      { value: "hill_simple", label: "Simple Hill Climbing" },
+      { value: "hill_steepest", label: "Steepest Ascent Hill Climbing" },
+      { value: "hill_stochastic", label: "Stochastic Hill Climbing" },
     ],
   },
 ];
@@ -91,7 +96,6 @@ function ControlPanel({
   heuristic,
   speed,
   depthLimit,
-  beamWidth,
   startNode,
   endNode,
   pickMode,
@@ -99,7 +103,6 @@ function ControlPanel({
   onHeuristicChange,
   onSpeedChange,
   onDepthLimitChange,
-  onBeamWidthChange,
   onStartNodeChange,
   onEndNodeChange,
   onPickMode,
@@ -115,7 +118,6 @@ function ControlPanel({
   heuristic: Heuristic;
   speed: number;
   depthLimit: number;
-  beamWidth: number;
   startNode: NodeCoord;
   endNode: NodeCoord;
   pickMode: PickMode;
@@ -123,7 +125,6 @@ function ControlPanel({
   onHeuristicChange: (value: Heuristic) => void;
   onSpeedChange: (value: number) => void;
   onDepthLimitChange: (value: number) => void;
-  onBeamWidthChange: (value: number) => void;
   onStartNodeChange: (next: NodeCoord) => void;
   onEndNodeChange: (next: NodeCoord) => void;
   onPickMode: (mode: PickMode) => void;
@@ -137,7 +138,6 @@ function ControlPanel({
 }) {
   const showHeuristic = HEURISTIC_ALGORITHMS.has(algorithm);
   const showDepth = DEPTH_ALGORITHMS.has(algorithm);
-  const showBeam = BEAM_ALGORITHMS.has(algorithm);
 
   return (
     <motion.aside
@@ -196,22 +196,6 @@ function ControlPanel({
               onChange={(event) => onDepthLimitChange(Number(event.target.value))}
             />
             <div className="speed-value">{depthLimit}</div>
-          </div>
-        </>
-      ) : null}
-
-      {showBeam ? (
-        <>
-          <div className="label">Beam Width</div>
-          <div className="speed-row">
-            <input
-              type="range"
-              min={2}
-              max={24}
-              value={beamWidth}
-              onChange={(event) => onBeamWidthChange(Number(event.target.value))}
-            />
-            <div className="speed-value">{beamWidth}</div>
           </div>
         </>
       ) : null}
@@ -898,7 +882,6 @@ export default function Scene() {
   const [heuristic, setHeuristic] = useState<Heuristic>("euclidean");
   const [speed, setSpeed] = useState(5);
   const [depthLimit, setDepthLimit] = useState(20);
-  const [beamWidth, setBeamWidth] = useState(6);
   const [startNode, setStartNode] = useState<NodeCoord>([0, 0]);
   const [endNode, setEndNode] = useState<NodeCoord>([GRID_SIZE - 1, GRID_SIZE - 1]);
   const [pickMode, setPickMode] = useState<PickMode>(null);
@@ -986,7 +969,6 @@ export default function Scene() {
           algorithm,
           heuristic,
           depth_limit: depthLimit,
-          beam_width: beamWidth,
         }),
       });
 
@@ -1067,7 +1049,6 @@ export default function Scene() {
           heuristic={heuristic}
           speed={speed}
           depthLimit={depthLimit}
-          beamWidth={beamWidth}
           startNode={startNode}
           endNode={endNode}
           pickMode={pickMode}
@@ -1075,7 +1056,6 @@ export default function Scene() {
           onHeuristicChange={setHeuristic}
           onSpeedChange={setSpeed}
           onDepthLimitChange={setDepthLimit}
-          onBeamWidthChange={setBeamWidth}
           onStartNodeChange={(next) => setStartNode(clampNode(next))}
           onEndNodeChange={(next) => setEndNode(clampNode(next))}
           onPickMode={setPickMode}

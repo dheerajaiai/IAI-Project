@@ -16,11 +16,11 @@ Algorithm = Literal[
     "dls",
     "iddfs",
     "ucs",
-    "bidirectional",
     "greedy",
     "astar",
-    "idastar",
-    "beam",
+    "hill_simple",
+    "hill_steepest",
+    "hill_stochastic",
 ]
 Heuristic = Literal["manhattan", "euclidean", "diagonal"]
 
@@ -495,6 +495,80 @@ def solve_astar(
     return reconstruct_path(came_from, start, end), explored, trace
 
 
+def pick_best_neighbor(
+    grid: List[List[float]],
+    current: Tuple[int, int],
+    end: Tuple[int, int],
+    mode: Heuristic,
+    visited: set,
+):
+    rows, cols = len(grid), len(grid[0])
+    options = []
+    for nxt in neighbors(current, rows, cols):
+        nr, nc = nxt
+        if grid[nr][nc] == 0 or nxt in visited:
+            continue
+        options.append((heuristic(nxt, end, mode), nxt))
+    options.sort(key=lambda x: x[0])
+    return options
+
+
+def solve_hill(
+    grid: List[List[float]],
+    start: Tuple[int, int],
+    end: Tuple[int, int],
+    mode: Heuristic,
+    variant: str,
+):
+    current = start
+    visited = {current}
+    path = [current]
+    explored = [current]
+    trace: List[dict] = []
+
+    max_steps = len(grid) * len(grid[0])
+    for step in range(max_steps):
+        h_cur = heuristic(current, end, mode)
+        trace.append(
+            {
+                "step": step,
+                "node": [current[0], current[1]],
+                "h": round(h_cur, 3),
+                "variant": variant,
+            }
+        )
+        if current == end:
+            break
+
+        options = pick_best_neighbor(grid, current, end, mode, visited)
+        if not options:
+            break
+
+        if variant == "simple":
+            next_node = options[0][1]
+            if options[0][0] >= h_cur:
+                break
+        elif variant == "steepest":
+            best = min(options, key=lambda x: x[0])
+            next_node = best[1]
+            if best[0] >= h_cur:
+                break
+        else:  # stochastic
+            better = [opt for opt in options if opt[0] < h_cur]
+            if not better:
+                break
+            next_node = better[0][1]
+
+        current = next_node
+        visited.add(current)
+        path.append(current)
+        explored.append(current)
+
+    if path[-1] != end:
+        return [], explored, trace
+    return path, explored, trace
+
+
 def solve_idastar(
     grid: List[List[float]], start: Tuple[int, int], end: Tuple[int, int], mode: Heuristic
 ):
@@ -622,17 +696,17 @@ def solve(payload: SolveRequest):
         path, explored, trace = solve_iddfs(grid, start, end, payload.depth_limit)
     elif payload.algorithm == "ucs":
         path, explored, trace = solve_ucs(grid, start, end)
-    elif payload.algorithm == "bidirectional":
-        path, explored, trace = solve_bidirectional(grid, start, end)
     elif payload.algorithm == "greedy":
         path, explored, trace = solve_greedy(grid, start, end, payload.heuristic)
     elif payload.algorithm == "astar":
         path, explored, trace = solve_astar(grid, start, end, payload.heuristic)
-    elif payload.algorithm == "idastar":
-        path, explored, trace = solve_idastar(grid, start, end, payload.heuristic)
+    elif payload.algorithm == "hill_simple":
+        path, explored, trace = solve_hill(grid, start, end, payload.heuristic, "simple")
+    elif payload.algorithm == "hill_steepest":
+        path, explored, trace = solve_hill(grid, start, end, payload.heuristic, "steepest")
     else:
-        path, explored, trace = solve_beam(
-            grid, start, end, payload.heuristic, payload.beam_width
+        path, explored, trace = solve_hill(
+            grid, start, end, payload.heuristic, "stochastic"
         )
 
     solve_time_ms = int((time.perf_counter() - start_time) * 1000)
@@ -684,11 +758,11 @@ def algorithms_catalog():
             "dls",
             "iddfs",
             "ucs",
-            "bidirectional",
             "greedy",
             "astar",
-            "idastar",
-            "beam",
+            "hill_simple",
+            "hill_steepest",
+            "hill_stochastic",
         ]
     }
 
