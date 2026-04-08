@@ -18,30 +18,7 @@ type Algorithm =
   | "greedy"
   | "astar"
   | "idastar"
-  | "beam"
-  | "hill_simple"
-  | "hill_steepest"
-  | "hill_stochastic"
-  | "simulated_annealing"
-  | "local_beam"
-  | "genetic"
-  | "means_end"
-  | "ao_star"
-  | "minimax"
-  | "alpha_beta"
-  | "forward_chaining"
-  | "backward_chaining"
-  | "resolution"
-  | "csp_backtracking"
-  | "forward_checking"
-  | "ac3"
-  | "id3"
-  | "naive_bayes"
-  | "knn"
-  | "bayesian_inference"
-  | "bayesian_network"
-  | "hmm"
-  | "strips";
+  | "beam";
 
 type Heuristic = "manhattan" | "euclidean" | "diagonal";
 
@@ -74,43 +51,14 @@ const HALF = WIDTH / 2;
 const NOISE_SCALE = 0.15;
 const HEIGHT_SCALE = 3.5;
 
-const TERRAIN_ALGORITHMS = new Set<Algorithm>([
-  "bfs",
-  "dfs",
-  "dls",
-  "iddfs",
-  "ucs",
-  "bidirectional",
-  "greedy",
-  "astar",
-  "idastar",
-  "beam",
-  "hill_simple",
-  "hill_steepest",
-  "hill_stochastic",
-  "simulated_annealing",
-  "local_beam",
-  "genetic",
-  "means_end",
-  "ao_star",
-]);
-
 const HEURISTIC_ALGORITHMS = new Set<Algorithm>([
   "greedy",
   "astar",
   "idastar",
   "beam",
-  "hill_simple",
-  "hill_steepest",
-  "hill_stochastic",
-  "simulated_annealing",
-  "local_beam",
-  "genetic",
-  "means_end",
-  "ao_star",
 ]);
 
-const BEAM_ALGORITHMS = new Set<Algorithm>(["beam", "local_beam"]);
+const BEAM_ALGORITHMS = new Set<Algorithm>(["beam"]);
 const DEPTH_ALGORITHMS = new Set<Algorithm>(["dls", "iddfs"]);
 
 const ALGORITHM_GROUPS: Array<{ title: string; items: Array<{ value: Algorithm; label: string }> }> = [
@@ -132,64 +80,6 @@ const ALGORITHM_GROUPS: Array<{ title: string; items: Array<{ value: Algorithm; 
       { value: "astar", label: "A*" },
       { value: "idastar", label: "IDA*" },
       { value: "beam", label: "Beam Search" },
-    ],
-  },
-  {
-    title: "Local Search",
-    items: [
-      { value: "hill_simple", label: "Simple Hill Climbing" },
-      { value: "hill_steepest", label: "Steepest Ascent Hill Climbing" },
-      { value: "hill_stochastic", label: "Stochastic Hill Climbing" },
-      { value: "simulated_annealing", label: "Simulated Annealing" },
-      { value: "local_beam", label: "Local Beam Search" },
-      { value: "genetic", label: "Genetic Algorithm" },
-    ],
-  },
-  {
-    title: "Adversarial Search",
-    items: [
-      { value: "minimax", label: "Minimax" },
-      { value: "alpha_beta", label: "Alpha-Beta Pruning" },
-    ],
-  },
-  {
-    title: "Knowledge Representation",
-    items: [
-      { value: "forward_chaining", label: "Forward Chaining" },
-      { value: "backward_chaining", label: "Backward Chaining" },
-      { value: "resolution", label: "Resolution" },
-    ],
-  },
-  {
-    title: "Constraint Satisfaction",
-    items: [
-      { value: "csp_backtracking", label: "Backtracking (CSP)" },
-      { value: "forward_checking", label: "Forward Checking" },
-      { value: "ac3", label: "Arc Consistency (AC-3)" },
-    ],
-  },
-  {
-    title: "Machine Learning Basics",
-    items: [
-      { value: "id3", label: "Decision Tree (ID3)" },
-      { value: "naive_bayes", label: "Naive Bayes" },
-      { value: "knn", label: "K-Nearest Neighbors" },
-    ],
-  },
-  {
-    title: "Probabilistic Reasoning",
-    items: [
-      { value: "bayesian_inference", label: "Bayesian Inference" },
-      { value: "bayesian_network", label: "Bayesian Network" },
-      { value: "hmm", label: "Hidden Markov Model (HMM)" },
-    ],
-  },
-  {
-    title: "Other Concepts",
-    items: [
-      { value: "means_end", label: "Means-End Analysis" },
-      { value: "ao_star", label: "AO*" },
-      { value: "strips", label: "Planning (STRIPS basics)" },
     ],
   },
 ];
@@ -245,7 +135,6 @@ function ControlPanel({
   error: string | null;
   traceLines: string[];
 }) {
-  const isTerrain = TERRAIN_ALGORITHMS.has(algorithm);
   const showHeuristic = HEURISTIC_ALGORITHMS.has(algorithm);
   const showDepth = DEPTH_ALGORITHMS.has(algorithm);
   const showBeam = BEAM_ALGORITHMS.has(algorithm);
@@ -276,9 +165,7 @@ function ControlPanel({
         ))}
       </select>
 
-      <div className="mode-tag">
-        {isTerrain ? "Terrain scenario (uses Start/Target nodes)" : "Scenario mode (concept demo dataset)"}
-      </div>
+      <div className="mode-tag">Path-based terrain mode</div>
 
       {showHeuristic ? (
         <>
@@ -341,58 +228,54 @@ function ControlPanel({
         <div className="speed-value">{speed}</div>
       </div>
 
-      {isTerrain ? (
-        <>
-          <div className="label">Start Node (row, col)</div>
-          <div className="coord-row">
-            <input
-              type="number"
-              min={0}
-              max={GRID_SIZE - 1}
-              value={startNode[0]}
-              onChange={(event) => onStartNodeChange([Number(event.target.value), startNode[1]])}
-            />
-            <input
-              type="number"
-              min={0}
-              max={GRID_SIZE - 1}
-              value={startNode[1]}
-              onChange={(event) => onStartNodeChange([startNode[0], Number(event.target.value)])}
-            />
-            <button
-              onClick={() => onPickMode(pickMode === "start" ? null : "start")}
-              className={pickMode === "start" ? "mini-button mini-active" : "mini-button"}
-            >
-              Pick
-            </button>
-          </div>
+      <div className="label">Start Node (row, col)</div>
+      <div className="coord-row">
+        <input
+          type="number"
+          min={0}
+          max={GRID_SIZE - 1}
+          value={startNode[0]}
+          onChange={(event) => onStartNodeChange([Number(event.target.value), startNode[1]])}
+        />
+        <input
+          type="number"
+          min={0}
+          max={GRID_SIZE - 1}
+          value={startNode[1]}
+          onChange={(event) => onStartNodeChange([startNode[0], Number(event.target.value)])}
+        />
+        <button
+          onClick={() => onPickMode(pickMode === "start" ? null : "start")}
+          className={pickMode === "start" ? "mini-button mini-active" : "mini-button"}
+        >
+          Pick
+        </button>
+      </div>
 
-          <div className="label">Target Node (row, col)</div>
-          <div className="coord-row">
-            <input
-              type="number"
-              min={0}
-              max={GRID_SIZE - 1}
-              value={endNode[0]}
-              onChange={(event) => onEndNodeChange([Number(event.target.value), endNode[1]])}
-            />
-            <input
-              type="number"
-              min={0}
-              max={GRID_SIZE - 1}
-              value={endNode[1]}
-              onChange={(event) => onEndNodeChange([endNode[0], Number(event.target.value)])}
-            />
-            <button
-              onClick={() => onPickMode(pickMode === "end" ? null : "end")}
-              className={pickMode === "end" ? "mini-button mini-active" : "mini-button"}
-            >
-              Pick
-            </button>
-          </div>
-          {pickMode ? <div className="hint">Click a terrain cell to set {pickMode} node.</div> : null}
-        </>
-      ) : null}
+      <div className="label">Target Node (row, col)</div>
+      <div className="coord-row">
+        <input
+          type="number"
+          min={0}
+          max={GRID_SIZE - 1}
+          value={endNode[0]}
+          onChange={(event) => onEndNodeChange([Number(event.target.value), endNode[1]])}
+        />
+        <input
+          type="number"
+          min={0}
+          max={GRID_SIZE - 1}
+          value={endNode[1]}
+          onChange={(event) => onEndNodeChange([endNode[0], Number(event.target.value)])}
+        />
+        <button
+          onClick={() => onPickMode(pickMode === "end" ? null : "end")}
+          className={pickMode === "end" ? "mini-button mini-active" : "mini-button"}
+        >
+          Pick
+        </button>
+      </div>
+      {pickMode ? <div className="hint">Click a terrain cell to set {pickMode} node.</div> : null}
 
       <button onClick={onRegenerate} className="ghost-button">
         Regenerate Terrain
