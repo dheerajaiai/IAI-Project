@@ -290,17 +290,17 @@ function ControlPanel({
 
       <style jsx>{`
         .panel {
-          background: rgba(255, 255, 250, 0.9);
-          backdrop-filter: blur(20px);
-          border: 1px solid rgba(30, 41, 59, 0.18);
-          border-radius: 16px;
+          background: rgba(255, 255, 250, 0.95);
+          border: 1px solid rgba(30, 41, 59, 0.12);
+          border-radius: 0;
           padding: 18px;
-          width: 340px;
-          max-height: calc(100vh - 40px);
+          width: 100%;
+          height: 100%;
+          max-height: none;
           overflow: auto;
           color: #111827;
           pointer-events: auto;
-          box-shadow: 0 18px 44px rgba(30, 41, 59, 0.16);
+          box-shadow: none;
         }
         .panel-title {
           font-size: 11px;
@@ -1018,32 +1018,8 @@ export default function Scene() {
   };
 
   return (
-    <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
-      <Canvas
-        dpr={[1, 2]}
-        camera={{ position: [0, 18, 22], fov: 55 }}
-        style={{
-          background:
-            "radial-gradient(circle at 30% 20%, #f8f7f2 0%, #ebe9df 50%, #d9d6c8 100%)",
-        }}
-      >
-        <primitive attach="fog" object={fog} />
-        <ambientLight intensity={0.3} />
-        <directionalLight position={[0, 20, 0]} intensity={1} />
-
-        <TerrainScene
-          terrain={terrain}
-          speed={speed}
-          solverTrace={solverTrace}
-          startNode={startNode}
-          endNode={endNode}
-          pickMode={pickMode}
-          onPickNode={handlePickNode}
-          onTraceStep={handleTraceStep}
-        />
-      </Canvas>
-
-      <div style={{ position: "absolute", top: 20, right: 20, zIndex: 10 }}>
+    <div className="layout-root">
+      <aside className="layout-sidebar">
         <ControlPanel
           algorithm={algorithm}
           heuristic={heuristic}
@@ -1067,7 +1043,64 @@ export default function Scene() {
           error={runError}
           traceLines={traceLines}
         />
-      </div>
+      </aside>
+
+      <main className="layout-sim">
+        <Canvas
+          dpr={[1, 2]}
+          camera={{ position: [0, 18, 22], fov: 55 }}
+          style={{
+            background:
+              "radial-gradient(circle at 30% 20%, #f8f7f2 0%, #ebe9df 50%, #d9d6c8 100%)",
+          }}
+        >
+          <primitive attach="fog" object={fog} />
+          <ambientLight intensity={0.3} />
+          <directionalLight position={[0, 20, 0]} intensity={1} />
+
+          <TerrainScene
+            terrain={terrain}
+            speed={speed}
+            solverTrace={solverTrace}
+            startNode={startNode}
+            endNode={endNode}
+            pickMode={pickMode}
+            onPickNode={handlePickNode}
+            onTraceStep={handleTraceStep}
+          />
+        </Canvas>
+      </main>
+
+      <style jsx>{`
+        .layout-root {
+          width: 100vw;
+          height: 100vh;
+          display: grid;
+          grid-template-columns: 380px minmax(0, 1fr);
+          background: #ece9df;
+        }
+        .layout-sidebar {
+          min-width: 0;
+          border-right: 1px solid rgba(30, 41, 59, 0.12);
+          background: #f7f5ee;
+          overflow: hidden;
+        }
+        .layout-sim {
+          min-width: 0;
+          height: 100%;
+        }
+        @media (max-width: 980px) {
+          .layout-root {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto minmax(0, 1fr);
+          }
+          .layout-sidebar {
+            max-height: 48vh;
+            border-right: none;
+            border-bottom: 1px solid rgba(30, 41, 59, 0.12);
+          }
+        }
+      `}</style>
     </div>
   );
 }
