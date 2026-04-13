@@ -43,7 +43,13 @@ type TerrainNode = {
 
 type NodeCoord = [number, number];
 
-type PickMode = "start" | "end" | null;
+type PickMode = "start" | "end" | "edge_from" | "edge_to" | null;
+
+type EdgeInspection = {
+  found: boolean;
+  message: string;
+  traceLines: string[];
+};
 
 const GRID_SIZE = 50;
 const WIDTH = 30;
@@ -98,6 +104,8 @@ function ControlPanel({
   depthLimit,
   startNode,
   endNode,
+  edgeFrom,
+  edgeTo,
   pickMode,
   onAlgorithmChange,
   onHeuristicChange,
@@ -105,11 +113,14 @@ function ControlPanel({
   onDepthLimitChange,
   onStartNodeChange,
   onEndNodeChange,
+  onEdgeFromChange,
+  onEdgeToChange,
   onPickMode,
   onRegenerate,
   onRun,
   stats,
   summary,
+  edgeInspection,
   isLoading,
   error,
   traceLines,
@@ -120,6 +131,8 @@ function ControlPanel({
   depthLimit: number;
   startNode: NodeCoord;
   endNode: NodeCoord;
+  edgeFrom: NodeCoord;
+  edgeTo: NodeCoord;
   pickMode: PickMode;
   onAlgorithmChange: (value: Algorithm) => void;
   onHeuristicChange: (value: Heuristic) => void;
@@ -127,11 +140,14 @@ function ControlPanel({
   onDepthLimitChange: (value: number) => void;
   onStartNodeChange: (next: NodeCoord) => void;
   onEndNodeChange: (next: NodeCoord) => void;
+  onEdgeFromChange: (next: NodeCoord) => void;
+  onEdgeToChange: (next: NodeCoord) => void;
   onPickMode: (mode: PickMode) => void;
   onRegenerate: () => void;
   onRun: () => void;
   stats: Stats | null;
   summary: string;
+  edgeInspection: EdgeInspection;
   isLoading: boolean;
   error: string | null;
   traceLines: string[];
@@ -261,6 +277,54 @@ function ControlPanel({
       </div>
       {pickMode ? <div className="hint">Click a terrain cell to set {pickMode} node.</div> : null}
 
+      <div className="label">Edge From (row, col)</div>
+      <div className="coord-row">
+        <input
+          type="number"
+          min={0}
+          max={GRID_SIZE - 1}
+          value={edgeFrom[0]}
+          onChange={(event) => onEdgeFromChange([Number(event.target.value), edgeFrom[1]])}
+        />
+        <input
+          type="number"
+          min={0}
+          max={GRID_SIZE - 1}
+          value={edgeFrom[1]}
+          onChange={(event) => onEdgeFromChange([edgeFrom[0], Number(event.target.value)])}
+        />
+        <button
+          onClick={() => onPickMode(pickMode === "edge_from" ? null : "edge_from")}
+          className={pickMode === "edge_from" ? "mini-button mini-active" : "mini-button"}
+        >
+          Pick
+        </button>
+      </div>
+
+      <div className="label">Edge To (row, col)</div>
+      <div className="coord-row">
+        <input
+          type="number"
+          min={0}
+          max={GRID_SIZE - 1}
+          value={edgeTo[0]}
+          onChange={(event) => onEdgeToChange([Number(event.target.value), edgeTo[1]])}
+        />
+        <input
+          type="number"
+          min={0}
+          max={GRID_SIZE - 1}
+          value={edgeTo[1]}
+          onChange={(event) => onEdgeToChange([edgeTo[0], Number(event.target.value)])}
+        />
+        <button
+          onClick={() => onPickMode(pickMode === "edge_to" ? null : "edge_to")}
+          className={pickMode === "edge_to" ? "mini-button mini-active" : "mini-button"}
+        >
+          Pick
+        </button>
+      </div>
+
       <button onClick={onRegenerate} className="ghost-button">
         Regenerate Terrain
       </button>
@@ -278,6 +342,14 @@ function ControlPanel({
       ) : null}
 
       {summary ? <div className="summary">{summary}</div> : null}
+      <div className="summary">{edgeInspection.message}</div>
+      {edgeInspection.traceLines.length ? (
+        <div className="trace">
+          {edgeInspection.traceLines.map((line) => (
+            <div key={`edge-${line}`}>{line}</div>
+          ))}
+        </div>
+      ) : null}
       {error ? <div className="error">{error}</div> : null}
 
       {traceLines.length ? (
@@ -576,6 +648,7 @@ function TerrainScene({
   solverTrace,
   startNode,
   endNode,
+  edgeHighlight,
   pickMode,
   onPickNode,
   onTraceStep,
@@ -585,6 +658,7 @@ function TerrainScene({
   solverTrace: TraceStep[];
   startNode: NodeCoord;
   endNode: NodeCoord;
+  edgeHighlight: [NodeCoord, NodeCoord] | null;
   pickMode: PickMode;
   onPickNode: (row: number, col: number) => void;
   onTraceStep: (line: string) => void;
@@ -613,6 +687,11 @@ function TerrainScene({
 
   const startMarker = useMemo(() => toPoint(startNode[0], startNode[1], terrain, 0.45), [startNode, terrain]);
   const endMarker = useMemo(() => toPoint(endNode[0], endNode[1], terrain, 0.45), [endNode, terrain]);
+  const edgePoints = useMemo(() => {
+    if (!edgeHighlight) return null;
+    const [from, to] = edgeHighlight;
+    return [toPoint(from[0], from[1], terrain, 0.55), toPoint(to[0], to[1], terrain, 0.55)];
+  }, [edgeHighlight, terrain]);
 
   useEffect(() => {
     setGrid(terrain.gridForSolver);
@@ -869,13 +948,17 @@ function TerrainScene({
         <meshStandardMaterial color="#b91c1c" emissive="#b91c1c" emissiveIntensity={0.65} />
       </mesh>
 
+      {edgePoints ? (
+        <Line points={edgePoints} color="#f59e0b" lineWidth={5} transparent opacity={0.95} />
+      ) : null}
+
       <OrbitControls enableDamping dampingFactor={0.08} minPolarAngle={0.2} maxPolarAngle={1.2} />
     </>
   );
 }
 
 export default function Scene() {
-  const { grid, stats, summary, isRunning, setResult, setRunning, reset, setGrid } = usePathStore();
+  const { grid, path, stats, summary, isRunning, setResult, setRunning, reset, setGrid } = usePathStore();
   const [seed, setSeed] = useState(42);
   const [terrain, setTerrain] = useState(() => generateTerrain(seed));
   const [algorithm, setAlgorithm] = useState<Algorithm>("astar");
@@ -884,6 +967,8 @@ export default function Scene() {
   const [depthLimit, setDepthLimit] = useState(20);
   const [startNode, setStartNode] = useState<NodeCoord>([0, 0]);
   const [endNode, setEndNode] = useState<NodeCoord>([GRID_SIZE - 1, GRID_SIZE - 1]);
+  const [edgeFrom, setEdgeFrom] = useState<NodeCoord>([0, 1]);
+  const [edgeTo, setEdgeTo] = useState<NodeCoord>([1, 1]);
   const [pickMode, setPickMode] = useState<PickMode>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [solverTrace, setSolverTrace] = useState<TraceStep[]>([]);
@@ -922,6 +1007,80 @@ export default function Scene() {
     return [row, col];
   }, []);
 
+  const nodeEqual = useCallback((a: NodeCoord, b: NodeCoord) => a[0] === b[0] && a[1] === b[1], []);
+
+  const edgeInspection = useMemo<EdgeInspection>(() => {
+    if (!path.length) {
+      return {
+        found: false,
+        message: "Edge Inspector: run an algorithm first, then select two nodes (Edge From/To).",
+        traceLines: [],
+      };
+    }
+
+    const from = clampNode(edgeFrom);
+    const to = clampNode(edgeTo);
+    const dr = Math.abs(from[0] - to[0]);
+    const dc = Math.abs(from[1] - to[1]);
+    if (dr > 1 || dc > 1 || (dr === 0 && dc === 0)) {
+      return {
+        found: false,
+        message: "Edge Inspector: selected nodes are not a valid single edge (must be neighboring cells).",
+        traceLines: [],
+      };
+    }
+
+    const pathNodes = path.map((item) => [item[0], item[1]] as NodeCoord);
+    let foundIndex = -1;
+    let forward = true;
+    for (let i = 0; i < pathNodes.length - 1; i += 1) {
+      const a = pathNodes[i];
+      const b = pathNodes[i + 1];
+      if (nodeEqual(a, from) && nodeEqual(b, to)) {
+        foundIndex = i;
+        forward = true;
+        break;
+      }
+      if (nodeEqual(a, to) && nodeEqual(b, from)) {
+        foundIndex = i;
+        forward = false;
+        break;
+      }
+    }
+
+    if (foundIndex === -1) {
+      return {
+        found: false,
+        message:
+          "Edge Inspector: this edge was not traversed in the final path for the current run.",
+        traceLines: [],
+      };
+    }
+
+    const a = pathNodes[foundIndex];
+    const b = pathNodes[foundIndex + 1];
+    const diagonal = a[0] !== b[0] && a[1] !== b[1] ? 1.4 : 1.0;
+    const elevationA = grid[a[0]]?.[a[1]] ?? 0;
+    const elevationB = grid[b[0]]?.[b[1]] ?? 0;
+    const slope = Math.abs(elevationB - elevationA);
+    const moveCost = diagonal + slope;
+
+    return {
+      found: true,
+      message: `Edge Inspector: selected edge was traversed in the final path (step ${foundIndex + 1} -> ${
+        foundIndex + 2
+      }).`,
+      traceLines: [
+        `Path edge: (${a[0]},${a[1]}) -> (${b[0]},${b[1]})`,
+        `Direction vs selected edge: ${forward ? "same" : "reverse"}`,
+        `Traversal step index: ${foundIndex + 1}`,
+        `Move breakdown: base=${diagonal.toFixed(1)} slope=${slope.toFixed(3)} total=${moveCost.toFixed(
+          3
+        )}`,
+      ],
+    };
+  }, [path, edgeFrom, edgeTo, clampNode, nodeEqual, grid]);
+
   const handlePickNode = useCallback(
     (row: number, col: number) => {
       const next: NodeCoord = [row, col];
@@ -929,6 +1088,10 @@ export default function Scene() {
         setStartNode(next);
       } else if (pickMode === "end") {
         setEndNode(next);
+      } else if (pickMode === "edge_from") {
+        setEdgeFrom(next);
+      } else if (pickMode === "edge_to") {
+        setEdgeTo(next);
       }
       setPickMode(null);
     },
@@ -1015,6 +1178,8 @@ export default function Scene() {
 
     setStartNode([0, 0]);
     setEndNode([GRID_SIZE - 1, GRID_SIZE - 1]);
+    setEdgeFrom([0, 1]);
+    setEdgeTo([1, 1]);
   };
 
   return (
@@ -1027,6 +1192,8 @@ export default function Scene() {
           depthLimit={depthLimit}
           startNode={startNode}
           endNode={endNode}
+          edgeFrom={edgeFrom}
+          edgeTo={edgeTo}
           pickMode={pickMode}
           onAlgorithmChange={setAlgorithm}
           onHeuristicChange={setHeuristic}
@@ -1034,11 +1201,14 @@ export default function Scene() {
           onDepthLimitChange={setDepthLimit}
           onStartNodeChange={(next) => setStartNode(clampNode(next))}
           onEndNodeChange={(next) => setEndNode(clampNode(next))}
+          onEdgeFromChange={(next) => setEdgeFrom(clampNode(next))}
+          onEdgeToChange={(next) => setEdgeTo(clampNode(next))}
           onPickMode={setPickMode}
           onRegenerate={handleRegenerate}
           onRun={handleRun}
           stats={stats}
           summary={summary}
+          edgeInspection={edgeInspection}
           isLoading={isRunning}
           error={runError}
           traceLines={traceLines}
@@ -1064,6 +1234,7 @@ export default function Scene() {
             solverTrace={solverTrace}
             startNode={startNode}
             endNode={endNode}
+            edgeHighlight={edgeInspection.found ? [clampNode(edgeFrom), clampNode(edgeTo)] : null}
             pickMode={pickMode}
             onPickNode={handlePickNode}
             onTraceStep={handleTraceStep}
